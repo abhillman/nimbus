@@ -1,15 +1,15 @@
-use std::collections::HashMap;
-use log::trace;
 use anyhow::bail;
-use ctor::ctor;
 use fallible_iterator::FallibleIterator;
-use sqlite3_parser::ast::{Cmd, Expr, FromClause, InsertBody, Literal, Name, OneSelect, QualifiedName, ResultColumn, Select, SelectBody, SelectTable, Stmt};
-use std::env;
-use std::hash::{Hash, Hasher};
-use log::info;
 use indexmap::Entries;
+use log::info;
+use sqlite3_parser::ast::{Cmd, Expr, FromClause, InsertBody, Literal, Name, OneSelect, QualifiedName, ResultColumn, Select, SelectBody, SelectTable, Stmt};
+
+use std::hash::{Hash, Hasher};
+#[cfg(test)] use ctor::ctor;
+#[cfg(test)] use std::env;
 
 #[ctor]
+#[cfg(test)]
 fn init_log() {
     if env::var("RUST_LOG").is_err() {
         env::set_var("RUST_LOG", "nimbus")
@@ -49,6 +49,7 @@ impl NimbusTable {
         }
     }
 
+    #[allow(dead_code)]
     fn name(&self) -> &String {
         if let Stmt::CreateTable { ref tbl_name, .. } = &self.create_stmt {
             match tbl_name {
@@ -74,7 +75,7 @@ struct NimbusData {
 
 impl NimbusData {
     fn get_table(&mut self, tbl_name: &QualifiedName) -> Option<&mut NimbusTable> {
-        if let Some(mut bucket) = self.tables.as_entries_mut().iter_mut().find(|bucket| {
+        if let Some(bucket) = self.tables.as_entries_mut().iter_mut().find(|bucket| {
             *bucket.key.tbl_name() == *tbl_name
         }) {
             Some(&mut bucket.key)
@@ -112,6 +113,10 @@ impl NimbusData {
                                             }
                                             Some(from_clause) => {
                                                 match from_clause { FromClause { select, joins, .. } => {
+                                                    if joins.is_some() {
+                                                        bail!("joins not supported");
+                                                    }
+
                                                     match select {
                                                         None => {
                                                             bail!("missing select-table");
@@ -232,25 +237,29 @@ impl NimbusData {
 }
 
 #[derive(Debug)]
-enum NimbusExecuteResult {
+pub enum NimbusExecuteResult {
     NoneResult,
+    #[allow(dead_code)]
     CreateTableResult(bool),
     InsertResult,
+    #[allow(dead_code)]
     SelectResult(Vec<Vec<Literal>>)
 }
 
-struct Nimbus {
+#[allow(dead_code)]
+pub struct Nimbus {
     data: NimbusData,
 }
 
+#[allow(dead_code)]
 impl Nimbus {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             data: NimbusData::default(),
         }
     }
 
-    fn eval(&mut self, input: &str) -> anyhow::Result<NimbusExecuteResult> {
+    pub fn eval(&mut self, input: &str) -> anyhow::Result<NimbusExecuteResult> {
         let input: Vec<u8> = input.into();
         let mut parser = sqlite3_parser::lexer::sql::Parser::new(input.as_ref());
 
@@ -263,7 +272,7 @@ impl Nimbus {
                     Cmd::Explain(_) => {
                         bail!("cmd-explain not supported");
                     }
-                    Cmd::ExplainQueryPlan(s) => {
+                    Cmd::ExplainQueryPlan(_) => {
                         bail!("cmd-explain-query-plan not supported")
                     }
                     Cmd::Stmt(ref stmt) => {
@@ -283,9 +292,8 @@ impl Nimbus {
 
 #[cfg(test)]
 mod tests {
-    use fallible_iterator::FallibleIterator;
-    use insta::assert_debug_snapshot;
     use crate::Nimbus;
+    use insta::assert_debug_snapshot;
 
     #[test]
     fn t0() {

@@ -46,8 +46,8 @@ std = []
 # for testing only, of course
 test_debug = []
 
-[profile.bench]
-debug = true
+#[profile.bench]
+#debug = true
 
 [package.metadata.release]
 allow-branch = ["master"]

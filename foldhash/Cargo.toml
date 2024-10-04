@@ -40,5 +40,5 @@ name = "avalanche"
 path = "benches/avalanche.rs"
 harness = false
 
-[profile.release]
-lto = "thin"
+#[profile.release]
+#lto = "thin"

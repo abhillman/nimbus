@@ -1,0 +1,8 @@
+[package]
+name = "repl"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+nimbus = {path = "../../../nimbus"}
+rustyline = "14.0.0"
