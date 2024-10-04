@@ -17,7 +17,7 @@ fn init_log() {
     env_logger::init();
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 struct NimbusTable {
     create_stmt: Stmt,
     data: Vec<Vec<Literal>>,
@@ -67,7 +67,7 @@ impl NimbusTable {
 }
 
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 struct NimbusData {
     tables: indexmap::IndexSet<NimbusTable>,
 }
@@ -282,6 +282,8 @@ impl Nimbus {
 
 #[cfg(test)]
 mod tests {
+    use fallible_iterator::FallibleIterator;
+    use insta::assert_debug_snapshot;
     use crate::Nimbus;
 
     #[test]
@@ -290,5 +292,8 @@ mod tests {
         nimbus.eval("create table tbl1(one text, two int)").unwrap();
         nimbus.eval("insert into tbl1 values ('abc', 2)").unwrap();
         nimbus.eval("select * from tbl1").unwrap();
+        assert_debug_snapshot!(nimbus.data.tables.iter().map(|nt| {
+            (nt.name(), nt.data.clone())
+        }).collect::<Vec<_>>());
     }
 }

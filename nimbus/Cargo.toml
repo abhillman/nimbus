@@ -12,3 +12,5 @@ sqlite3-parser = { path = "../lemon-rs" }
 indexmap = { path = "../indexmap" }
 log = "0.4.22"
 
+[dev-dependencies]
+insta = "1.40.0"

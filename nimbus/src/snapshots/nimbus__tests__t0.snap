@@ -1,0 +1,19 @@
+---
+source: nimbus/src/lib.rs
+expression: "nimbus.data.tables.iter().map(|nt|\n{ (nt.name(), nt.data.clone()) }).collect::<Vec<_>>()"
+---
+[
+    (
+        "tbl1",
+        [
+            [
+                String(
+                    "'abc'",
+                ),
+                Numeric(
+                    "2",
+                ),
+            ],
+        ],
+    ),
+]
