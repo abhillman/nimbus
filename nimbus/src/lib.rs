@@ -86,7 +86,7 @@ impl NimbusData {
     fn execute(&mut self, stmt: Stmt) -> anyhow::Result<NimbusExecuteResult> {
         match stmt {
             Stmt::CreateTable { .. } => {
-                Ok(NimbusExecuteResult::CreateTable(self.tables.insert(NimbusTable::from_create_stmt(stmt))))
+                Ok(NimbusExecuteResult::CreateTableResult(self.tables.insert(NimbusTable::from_create_stmt(stmt))))
             }
             Stmt::Select(select) => {
                 match &select {
@@ -152,7 +152,7 @@ impl NimbusData {
                                                 bail!("table with name {} not found", tbl_name)
                                             }
                                             Some(nimbus_table) => {
-                                                Ok(NimbusExecuteResult::Select(nimbus_table.data.clone()))
+                                                Ok(NimbusExecuteResult::SelectResult(nimbus_table.data.clone()))
                                             }
                                         }
                                     }
@@ -208,7 +208,7 @@ impl NimbusData {
                                                         }
                                                         nimbus_table.data.push(insert_row);
                                                     }
-                                                    Ok(NimbusExecuteResult::Insert)
+                                                    Ok(NimbusExecuteResult::InsertResult)
                                                 }
                                             }
                                         }
@@ -231,11 +231,12 @@ impl NimbusData {
     }
 }
 
+#[derive(Debug)]
 enum NimbusExecuteResult {
-    None,
-    CreateTable(bool),
-    Insert,
-    Select(Vec<Vec<Literal>>)
+    NoneResult,
+    CreateTableResult(bool),
+    InsertResult,
+    SelectResult(Vec<Vec<Literal>>)
 }
 
 struct Nimbus {
@@ -255,7 +256,7 @@ impl Nimbus {
 
         match parser.next()? {
             None => {
-                Ok(NimbusExecuteResult::None)
+                Ok(NimbusExecuteResult::NoneResult)
             }
             Some(cmd) => {
                 let result = match cmd {
@@ -291,7 +292,11 @@ mod tests {
         let mut nimbus = Nimbus::new();
         nimbus.eval("create table tbl1(one text, two int)").unwrap();
         nimbus.eval("insert into tbl1 values ('abc', 2)").unwrap();
-        nimbus.eval("select * from tbl1").unwrap();
+        let select = nimbus.eval("select * from tbl1").unwrap();
+        assert_debug_snapshot!(select);
+        nimbus.eval("insert into tbl1 values ('def', 3)").unwrap();
+        let select = nimbus.eval("select * from tbl1").unwrap();
+        assert_debug_snapshot!(select);
         assert_debug_snapshot!(nimbus.data.tables.iter().map(|nt| {
             (nt.name(), nt.data.clone())
         }).collect::<Vec<_>>());
