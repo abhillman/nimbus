@@ -5,4 +5,5 @@ members = [
     "lemon-rs",
     "nimbus",
     "nimbus/examples/repl",
+    "parse-sqlite-test",
 ]
