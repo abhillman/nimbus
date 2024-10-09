@@ -2,11 +2,16 @@ use anyhow::bail;
 use fallible_iterator::FallibleIterator;
 use indexmap::Entries;
 use log::info;
-use sqlite3_parser::ast::{Cmd, Expr, FromClause, InsertBody, Literal, Name, OneSelect, QualifiedName, ResultColumn, Select, SelectBody, SelectTable, Stmt};
+use sqlite3_parser::ast::{
+    Cmd, Expr, FromClause, InsertBody, Literal, Name, OneSelect, QualifiedName, ResultColumn,
+    Select, SelectBody, SelectTable, Stmt,
+};
 
+#[cfg(test)]
+use ctor::ctor;
+#[cfg(test)]
+use std::env;
 use std::hash::{Hash, Hasher};
-#[cfg(test)] use ctor::ctor;
-#[cfg(test)] use std::env;
 
 #[ctor]
 #[cfg(test)]
@@ -53,20 +58,15 @@ impl NimbusTable {
     fn name(&self) -> &String {
         if let Stmt::CreateTable { ref tbl_name, .. } = &self.create_stmt {
             match tbl_name {
-                QualifiedName { ref name, .. } => {
-                    match name {
-                        Name(n) => {
-                            n
-                        }
-                    }
-                }
+                QualifiedName { ref name, .. } => match name {
+                    Name(n) => n,
+                },
             }
         } else {
             panic!("developer error.")
         }
     }
 }
-
 
 #[derive(Default, Debug)]
 struct NimbusData {
@@ -75,9 +75,12 @@ struct NimbusData {
 
 impl NimbusData {
     fn get_table(&mut self, tbl_name: &QualifiedName) -> Option<&mut NimbusTable> {
-        if let Some(bucket) = self.tables.as_entries_mut().iter_mut().find(|bucket| {
-            *bucket.key.tbl_name() == *tbl_name
-        }) {
+        if let Some(bucket) = self
+            .tables
+            .as_entries_mut()
+            .iter_mut()
+            .find(|bucket| *bucket.key.tbl_name() == *tbl_name)
+        {
             Some(&mut bucket.key)
         } else {
             None
@@ -86,12 +89,17 @@ impl NimbusData {
 
     fn execute(&mut self, stmt: Stmt) -> anyhow::Result<NimbusExecuteResult> {
         match stmt {
-            Stmt::CreateTable { .. } => {
-                Ok(NimbusExecuteResult::CreateTableResult(self.tables.insert(NimbusTable::from_create_stmt(stmt))))
-            }
+            Stmt::CreateTable { .. } => Ok(NimbusExecuteResult::CreateTableResult(
+                self.tables.insert(NimbusTable::from_create_stmt(stmt)),
+            )),
             Stmt::Select(select) => {
                 match &select {
-                    Select { with, body, order_by, limit } => {
+                    Select {
+                        with,
+                        body,
+                        order_by,
+                        limit,
+                    } => {
                         if with.is_some() | order_by.is_some() | limit.is_some() {
                             bail!("select-(with|limit|order_by) not supported");
                         }
@@ -102,8 +110,19 @@ impl NimbusData {
                                     bail!("select-compounds not supported");
                                 }
                                 match select {
-                                    OneSelect::Select { distinctness, columns, from, where_clause, group_by, window_clause } => {
-                                        if distinctness.is_some() | where_clause.is_some() | group_by.is_some() | window_clause.is_some() {
+                                    OneSelect::Select {
+                                        distinctness,
+                                        columns,
+                                        from,
+                                        where_clause,
+                                        group_by,
+                                        window_clause,
+                                    } => {
+                                        if distinctness.is_some()
+                                            | where_clause.is_some()
+                                            | group_by.is_some()
+                                            | window_clause.is_some()
+                                        {
                                             bail!("one-select-(distinctness|where|group_by|window_clause) not supported");
                                         }
 
@@ -111,8 +130,8 @@ impl NimbusData {
                                             None => {
                                                 bail!("missing table name");
                                             }
-                                            Some(from_clause) => {
-                                                match from_clause { FromClause { select, joins, .. } => {
+                                            Some(from_clause) => match from_clause {
+                                                FromClause { select, joins, .. } => {
                                                     if joins.is_some() {
                                                         bail!("joins not supported");
                                                     }
@@ -123,20 +142,28 @@ impl NimbusData {
                                                         }
                                                         Some(select_table) => {
                                                             match select_table.as_ref() {
-                                                                SelectTable::Table(name, as_, indexed_) => {
-                                                                    if as_.is_some() | indexed_.is_some() {
+                                                                SelectTable::Table(
+                                                                    name,
+                                                                    as_,
+                                                                    indexed_,
+                                                                ) => {
+                                                                    if as_.is_some()
+                                                                        | indexed_.is_some()
+                                                                    {
                                                                         bail!("not supported")
                                                                     }
                                                                     name
                                                                 }
-                                                                SelectTable::TableCall(_, _, _) | SelectTable::Select(_, _) | SelectTable::Sub(_, _) => {
+                                                                SelectTable::TableCall(_, _, _)
+                                                                | SelectTable::Select(_, _)
+                                                                | SelectTable::Sub(_, _) => {
                                                                     bail!("not supported");
                                                                 }
                                                             }
                                                         }
                                                     }
-                                                } }
-                                            }
+                                                }
+                                            },
                                         };
 
                                         if columns.len() > 1 {
@@ -146,7 +173,8 @@ impl NimbusData {
                                                 ResultColumn::Star => {
                                                     // no-op
                                                 }
-                                                ResultColumn::TableStar(_) | ResultColumn::Expr(_, _) => {
+                                                ResultColumn::TableStar(_)
+                                                | ResultColumn::Expr(_, _) => {
                                                     bail!("not supported")
                                                 }
                                             }
@@ -154,10 +182,12 @@ impl NimbusData {
 
                                         match self.get_table(tbl_name) {
                                             None => {
-                                                bail!("table with name {} not found", tbl_name)
+                                                bail!("no such table: {}", tbl_name)
                                             }
                                             Some(nimbus_table) => {
-                                                Ok(NimbusExecuteResult::SelectResult(nimbus_table.data.clone()))
+                                                Ok(NimbusExecuteResult::SelectResult(
+                                                    nimbus_table.data.clone(),
+                                                ))
                                             }
                                         }
                                     }
@@ -173,8 +203,16 @@ impl NimbusData {
             Stmt::Update { .. } => {
                 todo!()
             }
-            Stmt::Insert { with, or_conflict, tbl_name, columns, body, returning } => {
-                if with.is_some() | or_conflict.is_some() | columns.is_some() | returning.is_some() {
+            Stmt::Insert {
+                with,
+                or_conflict,
+                tbl_name,
+                columns,
+                body,
+                returning,
+            } => {
+                if with.is_some() | or_conflict.is_some() | columns.is_some() | returning.is_some()
+                {
                     bail!("insert-(with|or_conflict|columns|returning) not supported");
                 }
                 if let Some(nimbus_table) = self.get_table(&tbl_name) {
@@ -187,7 +225,12 @@ impl NimbusData {
                                 bail!("insert-body-select-upsert not supported");
                             }
                             match &select {
-                                Select { with, body, order_by, limit } => {
+                                Select {
+                                    with,
+                                    body,
+                                    order_by,
+                                    limit,
+                                } => {
                                     if with.is_some() | order_by.is_some() | limit.is_some() {
                                         bail!("insert-body-select-(with|limit|order_by) not supported");
                                     }
@@ -226,7 +269,7 @@ impl NimbusData {
                         }
                     }
                 } else {
-                    bail!("Parse error: no such table: foo");
+                    bail!("no such table: foo");
                 }
             }
             _ => {
@@ -243,7 +286,7 @@ pub enum NimbusExecuteResult {
     CreateTableResult(bool),
     InsertResult,
     #[allow(dead_code)]
-    SelectResult(Vec<Vec<Literal>>)
+    SelectResult(Vec<Vec<Literal>>),
 }
 
 #[allow(dead_code)]
@@ -264,9 +307,7 @@ impl Nimbus {
         let mut parser = sqlite3_parser::lexer::sql::Parser::new(input.as_ref());
 
         match parser.next()? {
-            None => {
-                Ok(NimbusExecuteResult::NoneResult)
-            }
+            None => Ok(NimbusExecuteResult::NoneResult),
             Some(cmd) => {
                 let result = match cmd {
                     Cmd::Explain(_) => {
@@ -275,9 +316,7 @@ impl Nimbus {
                     Cmd::ExplainQueryPlan(_) => {
                         bail!("cmd-explain-query-plan not supported")
                     }
-                    Cmd::Stmt(ref stmt) => {
-                        Ok(self.data.execute(stmt.clone())?)
-                    }
+                    Cmd::Stmt(ref stmt) => Ok(self.data.execute(stmt.clone())?),
                 };
 
                 if result.is_ok() {
@@ -289,11 +328,12 @@ impl Nimbus {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use crate::Nimbus;
     use insta::assert_debug_snapshot;
+    use parse_sqlite_test::SqliteTestStatement;
+    use std::fmt::format;
 
     #[test]
     fn t0() {
@@ -305,8 +345,47 @@ mod tests {
         nimbus.eval("insert into tbl1 values ('def', 3)").unwrap();
         let select = nimbus.eval("select * from tbl1").unwrap();
         assert_debug_snapshot!(select);
-        assert_debug_snapshot!(nimbus.data.tables.iter().map(|nt| {
-            (nt.name(), nt.data.clone())
-        }).collect::<Vec<_>>());
+        assert_debug_snapshot!(nimbus
+            .data
+            .tables
+            .iter()
+            .map(|nt| { (nt.name(), nt.data.clone()) })
+            .collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn t1() {
+        let mut nimbus = Nimbus::new();
+
+        let script = parse_sqlite_test::sqlite_test_suite::select1::script();
+        for sts in script {
+            dbg!(&sts);
+
+            match sts {
+                SqliteTestStatement::Test {
+                    name,
+                    catch,
+                    sql,
+                    expected,
+                } => {
+                    match nimbus.eval(&sql) {
+                        Ok(r) => {
+                            dbg!(r);
+                        }
+                        Err(e) => {
+                            // an error is expected
+                            if catch {
+                                let fmt = format!("1 {{{e}}}");
+                                assert_eq!(fmt, expected, "{name}: {expected}");
+                            }
+                        }
+                    }
+                }
+                SqliteTestStatement::ExecSql { sql } => {
+                    let r = nimbus.eval(&sql);
+                    assert!(r.is_ok(), "failure: {sql} {r:?}")
+                }
+            }
+        }
     }
 }

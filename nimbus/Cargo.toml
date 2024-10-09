@@ -14,3 +14,4 @@ log = "0.4.22"
 
 [dev-dependencies]
 insta = "1.40.0"
+parse-sqlite-test = { path = "../parse-sqlite-test" }
