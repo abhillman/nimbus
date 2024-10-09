@@ -1,10 +1,10 @@
-use anyhow::bail;
+use anyhow::{anyhow, bail};
 use fallible_iterator::FallibleIterator;
 use indexmap::Entries;
 use log::info;
 use sqlite3_parser::ast::{
-    Cmd, Expr, FromClause, InsertBody, Literal, Name, OneSelect, QualifiedName, ResultColumn,
-    Select, SelectBody, SelectTable, Stmt,
+    Cmd, Expr, FromClause, InsertBody, JoinOperator, JoinType, JoinedSelectTable, Literal, Name,
+    OneSelect, QualifiedName, ResultColumn, Select, SelectBody, SelectTable, Stmt,
 };
 
 #[cfg(test)]
@@ -126,45 +126,24 @@ impl NimbusData {
                                             bail!("one-select-(distinctness|where|group_by|window_clause) not supported");
                                         }
 
-                                        let tbl_name = match from {
-                                            None => {
-                                                bail!("missing table name");
-                                            }
-                                            Some(from_clause) => match from_clause {
-                                                FromClause { select, joins, .. } => {
-                                                    if joins.is_some() {
-                                                        bail!("joins not supported");
+                                        let tbl_name = from
+                                            .as_ref()
+                                            .and_then(|from_clause| {
+                                                let FromClause { select, .. } = from_clause;
+                                                select.as_ref().and_then(|select| {
+                                                    if let SelectTable::Table(
+                                                        qualified_name,
+                                                        _,
+                                                        _,
+                                                    ) = select.as_ref()
+                                                    {
+                                                        Some(qualified_name)
+                                                    } else {
+                                                        None
                                                     }
-
-                                                    match select {
-                                                        None => {
-                                                            bail!("missing select-table");
-                                                        }
-                                                        Some(select_table) => {
-                                                            match select_table.as_ref() {
-                                                                SelectTable::Table(
-                                                                    name,
-                                                                    as_,
-                                                                    indexed_,
-                                                                ) => {
-                                                                    if as_.is_some()
-                                                                        | indexed_.is_some()
-                                                                    {
-                                                                        bail!("not supported")
-                                                                    }
-                                                                    name
-                                                                }
-                                                                SelectTable::TableCall(_, _, _)
-                                                                | SelectTable::Select(_, _)
-                                                                | SelectTable::Sub(_, _) => {
-                                                                    bail!("not supported");
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            },
-                                        };
+                                                })
+                                            })
+                                            .ok_or(anyhow!("unsupported"))?;
 
                                         if columns.len() > 1 {
                                             bail!("only select * supported")
@@ -185,6 +164,42 @@ impl NimbusData {
                                                 bail!("no such table: {}", tbl_name)
                                             }
                                             Some(nimbus_table) => {
+                                                let _joins = match from {
+                                                    None => {}
+                                                    Some(from) => {
+                                                        match &from.joins {
+                                                            None => {}
+                                                            Some(joins) => {
+                                                                for join in joins {
+                                                                    let JoinedSelectTable {
+                                                                        table,
+                                                                        ..
+                                                                    } = join;
+                                                                    if let SelectTable::Table(
+                                                                        qualified_name,
+                                                                        _,
+                                                                        _,
+                                                                    ) = table
+                                                                    {
+                                                                        match self.get_table(
+                                                                            qualified_name,
+                                                                        ) {
+                                                                            None => {
+                                                                                bail!("no such table: {}", qualified_name)
+                                                                            }
+                                                                            Some(_) => {
+                                                                                bail!("joins unsupported")
+                                                                            }
+                                                                        }
+                                                                    } else {
+                                                                        bail!("joins unsupported.")
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                };
+
                                                 Ok(NimbusExecuteResult::SelectResult(
                                                     nimbus_table.data.clone(),
                                                 ))
@@ -320,7 +335,7 @@ impl Nimbus {
                 };
 
                 if result.is_ok() {
-                    info!("{}", cmd)
+                    // info!("{}", cmd)
                 }
                 result
             }
@@ -359,8 +374,6 @@ mod tests {
 
         let script = parse_sqlite_test::sqlite_test_suite::select1::script();
         for sts in script {
-            dbg!(&sts);
-
             match sts {
                 SqliteTestStatement::Test {
                     name,
@@ -368,9 +381,11 @@ mod tests {
                     sql,
                     expected,
                 } => {
+                    println!("{}", &sql);
+
                     match nimbus.eval(&sql) {
                         Ok(r) => {
-                            dbg!(r);
+                            // no-op;
                         }
                         Err(e) => {
                             // an error is expected
@@ -382,6 +397,8 @@ mod tests {
                     }
                 }
                 SqliteTestStatement::ExecSql { sql } => {
+                    println!("{}", &sql);
+
                     let r = nimbus.eval(&sql);
                     assert!(r.is_ok(), "failure: {sql} {r:?}")
                 }

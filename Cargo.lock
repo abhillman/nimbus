@@ -747,6 +747,7 @@ dependencies = [
  "indexmap 2.6.0",
  "insta",
  "log",
+ "parse-sqlite-test",
  "sqlite3-parser",
 ]
 
