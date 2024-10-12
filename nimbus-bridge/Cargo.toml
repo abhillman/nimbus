@@ -1,0 +1,10 @@
+[package]
+name = "nimbus-bridge"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.89"
+sqlite3-parser = { version = "0.13.0", path = "../lemon-rs" }
+fallible-iterator = "0.3.0"
+nimbus-relational-algebra = { version = "0.1.0", path = "../nimbus-relational-algebra" }
